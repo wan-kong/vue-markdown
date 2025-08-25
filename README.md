@@ -27,6 +27,9 @@ And is referenced from [`react-markdown`](https://github.com/remarkjs/react-mark
     - [Customize tag rendering with scoped slot](#customize-tag-rendering-with-scoped-slot)
       - [re-render issue](#re-render-issue)
     - [Use `<slot>` in markdown](#use-slot-in-markdown)
+    - [Handling incomplete markdown during streaming](#handling-incomplete-markdown-during-streaming)
+      - [Supported incomplete formats](#supported-incomplete-formats)
+      - [When to enable parseIncomplete](#when-to-enable-parseincomplete)
     - [Security](#security)
   - [Documentation](#documentation)
     - [`<VueMarkdown>` \& `<VueMarkdownAsync>` Props](#vuemarkdown--vuemarkdownasync-props)
@@ -41,6 +44,7 @@ And is referenced from [`react-markdown`](https://github.com/remarkjs/react-mark
 - 🪑 Supports rendering of additional elements (i.e: GFM: `tables`, `footnotes`, `task lists` etc.) through [remark](https://github.com/remarkjs/remark) and [rehype](https://github.com/rehypejs/rehype) plugins.
 - :hammer_and_wrench: Allows customization of tag attributes for markdown elements. (i.e: `class`, `target`, `rel` etc.)
 - 🛃 Enables customization of markdown element rendering through Vue `scoped slot`.
+- 🎨 Smart incomplete markdown parsing - Automatically completes unterminated formatting during streaming ( from [streamdown](https://github.com/vercel/streamdown))
 - 🚀 Support rendering Vue component in markdown (need `rehype-raw`)
 - 🛡️ Safely renders markdown to prevent harmful content by `rehype-sanitize`
 - 📝 Fully typed with TypeScript for better developer experience and type safety.
@@ -459,6 +463,56 @@ const markdown = ref(`
 </template>
 ```
 
+### Handling incomplete markdown during streaming
+When building AI-powered applications or live editors, you often receive markdown content in chunks that may contain incomplete formatting. The `parseIncomplete` feature automatically detects and completes unterminated markdown syntax to ensure clean rendering during streaming.
+
+```vue
+<script setup lang="ts">
+import { VueMarkdown } from '@crazydos/vue-markdown'
+import { ref } from 'vue'
+
+// Simulating streamed content with incomplete formatting
+const streamedContent = ref('This is **bold text that is unfinish')
+
+// Later, as more content streams in...
+setTimeout(() => {
+  streamedContent.value = 'This is **bold text that is unfinished** and here is `code block that'
+}, 1000)
+
+setTimeout(() => {
+  streamedContent.value = 'This is **bold text that is unfinished** and here is `code block that works`'
+}, 2000)
+</script>
+
+<template>
+  <!-- Without parseIncomplete: formatting appears broken during streaming -->
+  <VueMarkdown :markdown="streamedContent" />
+
+  <!-- With parseIncomplete: formatting is automatically completed -->
+  <VueMarkdown :markdown="streamedContent" :parse-incomplete="true" />
+</template>
+```
+
+#### Supported incomplete formats
+
+The `parseIncomplete` feature handles the following markdown syntax:
+
+- **Bold formatting**: `**text` → `**text**`
+- **Italic formatting**: `*text` or `_text` → `*text*` or `_text_`
+- **Bold-italic formatting**: `***text` → `***text***`
+- **Inline code**: `` `code`` → `` `code` ``
+- **Strikethrough**: `~~text` → `~~text~~`
+- **Links and images**: `[incomplete link` → removes incomplete content
+- **KaTeX math**: `$formula` or `$$formula` → `$formula$` or `$$formula$$`
+
+#### When to enable parseIncomplete
+
+- ✅ **AI streaming responses** - Perfect for ChatGPT-style interfaces
+- ✅ **Live markdown editors** - Prevents broken formatting while typing
+- ✅ **Real-time collaborative editing** - Ensures consistent rendering across clients
+- ❌ **Static content** - Not needed for pre-written markdown documents
+- ❌ **Performance-critical scenarios** - Adds processing overhead
+
 ### Security
 To defend against various attacks (e.g., XSS), we use the `rehype-sanitize` unified plugin internally. To enable it, please add `:sanitize="true"`.
 
@@ -501,15 +555,16 @@ const sanitizeOption: SanitizeOptions = {
 ## Documentation
 ### `<VueMarkdown>` & `<VueMarkdownAsync>` Props
 
-| Prop              | Description                                                                                                                                                                                                                                                                                                                              | Type                           | Default                        | Example                                                                                                                     |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `markdown`        | Markdown content                                                                                                                                                                                                                                                                                                                         | `string`                       | `''`                           |                                                                                                                             |
+| Prop              | Description                                                  | Type                           | Default                        | Example                                                      |
+| ----------------- | ------------------------------------------------------------ | ------------------------------ | ------------------------------ | ------------------------------------------------------------ |
+| `markdown`        | Markdown content                                             | `string`                       | `''`                           |                                                              |
 | `customAttrs`     | You can set custom attributes for each element, such as `href`, `target`, `rel`, `lazyload`, etc. The key is the HTML tag name, and the value can either be an object or a function that returns an object. The value will be passed to Vue's `h` function. You can refer to Vue's official documentation to learn how to configure `h`. | `CustomAttrs`                  | `{}`                           | ``` { img: { lazyload: true } } ```<br /> <br /> `{ h1: (node, combinedAttrs) => { return { class: ['title', 'mb-2'] } }} ` |
-| `remarkPlugins`   | Remark plugins. These plugins will be used between `remark-parse` and `remark-rehype`. See https://github.com/remarkjs/remark?tab=readme-ov-file#plugins                                                                                                                                                                                 | `PluggableList`                | `[]`                           |                                                                                                                             |
-| `rehypePlugins`   | rehype plugins. These plugins will be used after `remark-rehype` but before `rehype-sanitize`. See https://github.com/remarkjs/remark-rehype?tab=readme-ov-file#related                                                                                                                                                                  | ` PluggableList`               | `[]`                           |                                                                                                                             |
-| `sanitize`        | Whether to sanitize the HTML content. (use `rehype-sanitize`). You need to disable this option if you want to render `<slot>` in markdown content.                                                                                                                                                                                       | `boolean`                      | `false`                        |                                                                                                                             |
-| `sanitizeOptions` | Options for `rehype-sanitize`. see: https://github.com/syntax-tree/hast-util-sanitize#schema                                                                                                                                                                                                                                             | `SanitizeOptions`              | `{ allowDangerousHtml: true }` |                                                                                                                             |
-| `rehypeOptions`   | Options for `rehype-parse`. see: https://github.com/remarkjs/remark-rehype?tab=readme-ov-file#options                                                                                                                                                                                                                                    | `Omit<TRehypeOptions, 'file'>` | `{}`                           |                                                                                                                             |
+| `parseIncomplete` | Automatically detects and completes unterminated markdown syntax. Essential for streaming applications where markdown content arrives in chunks with incomplete formatting (e.g., AI responses, live editors). When enabled, incomplete bold (`**text`), italic (`*text`), code (`` `code``), links (`[text`), and other formatting will be automatically completed to ensure clean rendering. | `boolean`                      | `false`                        | `:parse-incomplete="true"`                                   |
+| `remarkPlugins`   | Remark plugins. These plugins will be used between `remark-parse` and `remark-rehype`. See https://github.com/remarkjs/remark?tab=readme-ov-file#plugins | `PluggableList`                | `[]`                           |                                                              |
+| `rehypePlugins`   | rehype plugins. These plugins will be used after `remark-rehype` but before `rehype-sanitize`. See https://github.com/remarkjs/remark-rehype?tab=readme-ov-file#related | ` PluggableList`               | `[]`                           |                                                              |
+| `sanitize`        | Whether to sanitize the HTML content. (use `rehype-sanitize`). You need to disable this option if you want to render `<slot>` in markdown content. | `boolean`                      | `false`                        |                                                              |
+| `sanitizeOptions` | Options for `rehype-sanitize`. see: https://github.com/syntax-tree/hast-util-sanitize#schema | `SanitizeOptions`              | `{ allowDangerousHtml: true }` |                                                              |
+| `rehypeOptions`   | Options for `rehype-parse`. see: https://github.com/remarkjs/remark-rehype?tab=readme-ov-file#options | `Omit<TRehypeOptions, 'file'>` | `{}`                           |                                                              |
 
 ### `scoped slot` and `custom attrs`
 In both scoped slots and `customAttrs`, you can receive additional parameters. Besides the HTML attributes that can be set in Markdown, `vue-markdown` also provides additional parameters.

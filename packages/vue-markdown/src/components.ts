@@ -11,6 +11,7 @@ import {
   watch,
 } from 'vue'
 import { render } from './hast-to-vnode'
+import { parseIncompleteMarkdown } from './parse-incomplete-markdown'
 import { useMarkdownProcessor } from './useProcessor'
 
 export type { CustomAttrs, SanitizeOptions, TVueMarkdown }
@@ -32,6 +33,10 @@ const sharedProps = {
     type: Array as PropType<PluggableList>,
     default: () => [],
   },
+  parseIncomplete: {
+    type: Boolean,
+    default: false,
+  },
   rehypeOptions: {
     type: Object as PropType<Omit<TRehypeOptions, 'file'>>,
     default: () => ({}),
@@ -49,7 +54,7 @@ const vueMarkdownImpl = defineComponent({
   name: 'VueMarkdown',
   props: sharedProps,
   setup(props, { slots, attrs }) {
-    const { markdown, remarkPlugins, rehypePlugins, rehypeOptions, sanitize, sanitizeOptions, customAttrs } = toRefs(props)
+    const { markdown, remarkPlugins, rehypePlugins, rehypeOptions, sanitize, sanitizeOptions, customAttrs, parseIncomplete } = toRefs(props)
     const { processor } = useMarkdownProcessor({
       remarkPlugins,
       rehypePlugins,
@@ -59,7 +64,8 @@ const vueMarkdownImpl = defineComponent({
     })
 
     return () => {
-      const mdast = processor.value.parse(markdown.value)
+      const mdText = parseIncomplete.value ? parseIncompleteMarkdown(markdown.value) : markdown.value
+      const mdast = processor.value.parse(mdText)
       const hast = processor.value.runSync(mdast) as Root
       return render(hast, attrs, slots, customAttrs.value)
     }
@@ -70,7 +76,7 @@ const vueMarkdownAsyncImpl = defineComponent({
   name: 'VueMarkdownAsync',
   props: sharedProps,
   async setup(props, { slots, attrs }) {
-    const { markdown, remarkPlugins, rehypePlugins, rehypeOptions, sanitize, sanitizeOptions, customAttrs } = toRefs(props)
+    const { markdown, remarkPlugins, rehypePlugins, rehypeOptions, sanitize, sanitizeOptions, customAttrs, parseIncomplete } = toRefs(props)
     const { processor } = useMarkdownProcessor({
       remarkPlugins,
       rehypePlugins,
@@ -81,7 +87,8 @@ const vueMarkdownAsyncImpl = defineComponent({
 
     const hast = shallowRef<Root | null>(null)
     const process = async (): Promise<void> => {
-      const mdast = processor.value.parse(markdown.value)
+      const mdText = parseIncomplete.value ? parseIncompleteMarkdown(markdown.value) : markdown.value
+      const mdast = processor.value.parse(mdText)
       hast.value = await processor.value.run(mdast) as Root
     }
 
